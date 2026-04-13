@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime
 
 # SETUP
-MY_KEY = "f915dbafd3003ea43b78223a66d710ae" 
+MY_KEY = "" 
 client = FirmsClient(api_key = MY_KEY)
 print("Testing NASA Earthdata connection...")
 

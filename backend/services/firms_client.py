@@ -1,5 +1,6 @@
 import requests
 import pandas as pd
+from datetime import datetime
 
 class FirmsClient:
     def __init__(self, api_key: str, base_url: str = "https://firms.modaps.eosdis.nasa.gov"):
@@ -29,6 +30,10 @@ class FirmsClient:
         
         Returns:
             the response from the query
+
+        Raises:
+            urllib.error.HTTPError: Incorrect API key, unknown endpoint, rate limit
+            pandas.errors.ParserError: Bad data returned from FIRMS
         """
 
         url = self.base_url + endpoint
@@ -72,7 +77,7 @@ class FirmsClient:
         """
         return self.mapkey_status()['current_transactions']
     
-    def transaction_remaining(self) -> int:
+    def transactions_remaining(self) -> int:
         """
         Returns:
             the number of remaining transactions in the interval
@@ -98,7 +103,7 @@ class FirmsClient:
         """
         return self.read_csv('/api/data_availability/csv/' + self.api_key + '/' + source)
 
-    def area(self, source: str, date: str, day_range: int, area: str = 'world') -> pd.DataFrame:
+    def area(self, source: str, day_range: int, date: datetime = datetime.now(),  area: str = 'world') -> pd.DataFrame:
         """
         Fetches the fire hotspot data for a given area
 
@@ -110,5 +115,6 @@ class FirmsClient:
                   or specific coordinates 'x1,y1,x2,y2' with max boundaries -180, -90, 180, 90
 
         """
-        endpoint = f'/api/area/csv/{self.api_key}/{source}/{area}/{day_range}/{date}'
+        endpoint = f'/api/area/csv/{self.api_key}/{source}/{area}/{day_range}/{date.strftime('%Y-%m-%d')}'
         return self.read_csv(endpoint)
+    

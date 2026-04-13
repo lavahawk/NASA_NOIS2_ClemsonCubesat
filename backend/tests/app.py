@@ -18,4 +18,9 @@ df = df.rename(columns={
     "latitude": "lat",
     "longitude": "lon"
 })
+
 st.map(df[["lat", "lon"]])
+
+@st.fragment
+def create_map():
+    return 0

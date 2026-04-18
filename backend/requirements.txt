@@ -1,6 +1,5 @@
-requests==2.33.1
-pandas==3.0.2
-python-dotenv==1.2.2
-fastapi==0.135.3
-pydantic-geojson==0.3.2
-uvicorn==0.34.0
+fastapi
+pandas
+requests
+psycopg[binary]
+uvicorn

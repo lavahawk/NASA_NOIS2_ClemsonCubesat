@@ -19,10 +19,12 @@ const emptyFeatureCollection: FireCollection = {
   features: [],
 };
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+const DEFAULT_BBOX = '-179.2,18.9,-66.9,71.4';
+
 const wildfireLayerStyle: LayerProps = {
   id: 'wildfires-point-layer',
   type: 'circle',
-  filter: ['==', ['geometry-type'], 'Point'],
   paint: {
     'circle-radius': 6,
     'circle-color': '#ff4d4d',
@@ -34,7 +36,7 @@ const wildfireLayerStyle: LayerProps = {
 const wildfirePolygonLayerStyle: LayerProps = {
   id: 'wildfires-polygon-layer',
   type: 'fill',
-  filter: ['==', ['geometry-type'], 'Polygon'],
+  filter: ['==', '$type', 'Polygon'],
   paint: {
     'fill-color': '#4d4dff',
     'fill-opacity': 0.4,
@@ -44,7 +46,7 @@ const wildfirePolygonLayerStyle: LayerProps = {
 const wildfirePolygonOutlineStyle: LayerProps = {
   id: 'wildfires-polygon-outline',
   type: 'line',
-  filter: ['==', ['geometry-type'], 'Polygon'],
+  filter: ['==', '$type', 'Polygon'],
   paint: {
     'line-color': '#4d4dff',
     'line-width': 2,
@@ -146,8 +148,40 @@ function buildLatLonGrid(step = 10) {
   };
 }
 
+function getPrevious24HoursQuery() {
+  const end = new Date();
+  const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+
+  return {
+    startTime: start.toISOString(),
+    endTime: end.toISOString(),
+    bbox: DEFAULT_BBOX,
+  };
+}
+
+function normalizePointsResponse(data: any): FireCollection {
+  if (data?.points?.type === 'FeatureCollection') {
+    return data.points;
+  }
+
+  if (data?.type === 'FeatureCollection') {
+    return data;
+  }
+
+  if (Array.isArray(data?.features)) {
+    return { type: 'FeatureCollection', features: data.features };
+  }
+
+  if (Array.isArray(data?.points)) {
+    return { type: 'FeatureCollection', features: data.points };
+  }
+
+  return emptyFeatureCollection;
+}
+
 function App() {
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const activeFetchIdRef = useRef(0);
 
   const [wildfires, setWildfires] = useState<FireCollection>(emptyFeatureCollection);
   const [loading, setLoading] = useState(false);
@@ -160,52 +194,87 @@ function App() {
   const [zoom, setZoom] = useState(4);
   const [hoverCoords, setHoverCoords] = useState<{ lng: number; lat: number } | null>(null);
   const [selectedFire, setSelectedFire] = useState<{ lng: number; lat: number; props: FireProperties } | null>(null);
-
-  const queryParams = useMemo(
-    () => ({
-      start: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-      end: new Date().toISOString(),
-      bbox: '-125,24,-66,49',
-    }),
-    []
-  );
+  const [debugMessage, setDebugMessage] = useState('No points loaded yet');
+  const queryPreview = useMemo(() => getPrevious24HoursQuery(), []);
 
   const fetchNASAData = useCallback(async () => {
+    const fetchId = activeFetchIdRef.current + 1;
+    activeFetchIdRef.current = fetchId;
     setLoading(true);
-
-    const url = `http://localhost:8000/v1/points?start_time=${encodeURIComponent(
-      queryParams.start
-    )}&end_time=${encodeURIComponent(queryParams.end)}&bbox=${encodeURIComponent(queryParams.bbox)}`;
+    setWildfires(emptyFeatureCollection);
+    setDebugMessage('Querying /v1/points...');
+    const query = getPrevious24HoursQuery();
+    const baseParams = {
+      start_time: query.startTime,
+      end_time: query.endTime,
+      bbox: query.bbox,
+    };
 
     try {
-      const response = await fetch(url);
+      const allFeatures: GeoJSON.Feature<GeoJSON.Geometry, FireProperties>[] = [];
+      let nextCursor: string | null = null;
+      let hasMore = true;
+      let pageCount = 0;
 
-      if (!response.ok) {
-        throw new Error(`API Connection Failed: ${response.status} ${response.statusText}`);
+      while (hasMore) {
+        pageCount += 1;
+        const params = new URLSearchParams({
+          ...baseParams,
+          ...(nextCursor ? { cursor: nextCursor } : {}),
+        });
+        const url = `${API_BASE_URL}/v1/points?${params.toString()}`;
+        const response = await fetch(url);
+
+        if (!response.ok) {
+          let message = `${response.status} ${response.statusText}`;
+
+          try {
+            const errorBody = await response.json();
+            if (errorBody?.message) {
+              message = errorBody.message;
+            }
+          } catch {
+            // Ignore non-JSON error bodies and fall back to the HTTP status text.
+          }
+
+          throw new Error(`API Connection Failed: ${message}`);
+        }
+
+        const data = await response.json();
+        const collection = normalizePointsResponse(data);
+
+        allFeatures.push(...collection.features);
+        if (activeFetchIdRef.current !== fetchId) {
+          return;
+        }
+
+        const pageMessage = `Loaded ${allFeatures.length} points across ${pageCount} page${pageCount === 1 ? '' : 's'}`;
+        console.log(`[NOIS2] ${pageMessage}`);
+        setDebugMessage(pageMessage);
+        setWildfires({
+          type: 'FeatureCollection',
+          features: [...allFeatures],
+        });
+
+        hasMore = Boolean(data?.has_more);
+        nextCursor = typeof data?.next_cursor === 'string' ? data.next_cursor : null;
+
+        if (hasMore && !nextCursor) {
+          throw new Error('API pagination error: missing next_cursor while has_more is true');
+        }
       }
-
-      const data = await response.json();
-      console.log('API DATA:', data);
-
-      const collection: FireCollection =
-        data?.points?.type === 'FeatureCollection'
-          ? data.points
-          : data?.type === 'FeatureCollection'
-            ? data
-            : Array.isArray(data?.features)
-              ? { type: 'FeatureCollection', features: data.features }
-              : Array.isArray(data?.points)
-                ? { type: 'FeatureCollection', features: data.points }
-                : emptyFeatureCollection;
-
-      setWildfires(collection);
     } catch (err) {
       console.error('NASA API Error:', err);
-      setWildfires(emptyFeatureCollection);
+      if (activeFetchIdRef.current === fetchId) {
+        setDebugMessage(err instanceof Error ? err.message : 'API query failed');
+        setWildfires(emptyFeatureCollection);
+      }
     } finally {
-      setLoading(false);
+      if (activeFetchIdRef.current === fetchId) {
+        setLoading(false);
+      }
     }
-  }, [queryParams.start, queryParams.end, queryParams.bbox]);
+  }, []);
 
   useEffect(() => {
     fetchNASAData();
@@ -276,8 +345,6 @@ function App() {
 
           {wildfires.features.length > 0 && (
             <Source id="wildfires-data" type="geojson" data={wildfires}>
-              <Layer {...wildfirePolygonLayerStyle} layout={{ visibility: showPerimeters ? 'visible' : 'none' }} />
-              <Layer {...wildfirePolygonOutlineStyle} layout={{ visibility: showPerimeters ? 'visible' : 'none' }} />
               <Layer {...wildfireLayerStyle} layout={{ visibility: showHotspots ? 'visible' : 'none' }} />
             </Source>
           )}
@@ -403,11 +470,11 @@ function App() {
             <div style={{ fontSize: '13px', fontFamily: 'monospace', lineHeight: '1.6' }}>
               <strong style={{ color: '#333' }}>BBOX:</strong>
               <br />
-              <span style={{ color: '#d32f2f' }}>{queryParams.bbox}</span>
+              <span style={{ color: '#d32f2f' }}>{queryPreview.bbox}</span>
               <br />
               <strong style={{ color: '#333' }}>Range:</strong>
               <br />
-              {queryParams.start.substring(0, 10)} - Now
+              Previous 24h UTC
             </div>
           </div>
 
@@ -456,6 +523,9 @@ function App() {
             <h3 style={{ margin: '0 0 10px 0' }}>Statistics</h3>
             <p style={{ fontWeight: 'bold' }}>
               Total Objects: {loading ? 'Loading...' : totalObjects}
+            </p>
+            <p style={{ fontSize: '12px', color: '#4b5563', marginTop: 0 }}>
+              Debug: {debugMessage}
             </p>
 
             <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>

@@ -1,0 +1,17 @@
+class GridMETDataset:
+    """Common GridMET dataset identifiers as plain string constants."""
+
+    BI = "bi"
+    ERC = "erc"
+    FM100 = "fm100"
+    FM1000 = "fm1000"
+    PET = "pet"
+    PR = "pr"
+    RMAX = "rmax"
+    RMIN = "rmin"
+    SPH = "sph"
+    SRAD = "srad"
+    TH = "th"
+    TMMN = "tmmn"
+    TMMX = "tmmx"
+    VS = "vs"

@@ -5,7 +5,6 @@ export const wildfireLayerStyle: LayerProps = {
   type: 'circle',
   filter: ['==', '$type', 'Point'],
   paint: {
-    // Exaggerate the size difference so the worst fires are massively larger
     'circle-radius': [
       'interpolate', ['linear'], ['zoom'],
       2, ['interpolate', ['linear'], ['get', 'frp'], 0, 1, 100, 3, 500, 8],
@@ -13,39 +12,28 @@ export const wildfireLayerStyle: LayerProps = {
       8, ['interpolate', ['linear'], ['get', 'frp'], 0, 3, 100, 8, 500, 20]
     ],
     
-    // Stark contrast palette: Muted yellows -> Reds -> Neon Magenta -> White Hot
+    // High-saturation industrial color palette
     'circle-color': [
       'step',
       ['get', 'frp'],
-      '#ffcc00', // 0-10: Muted Gold (Low - blends in)
-      10, '#f38d8dea', // 10-50: Moderate 
-      50, '#d75151', // 50-100: High
-      100, '#a10d12', // 100-300: Severe - instantly catches the eye
-      300, '#610404'  // >300: Catastrophic - impossible to miss
+      '#FFB300', // Low
+      10, '#FF5722', // Moderate
+      50, '#E64A19', // High
+      100, '#D32F2F', // Severe
+      300, '#8B0000'  // Catastrophic
     ],
     
-    // Make small fires transparent so the big ones punch through the clusters
-    'circle-opacity': [
-      'interpolate', ['linear'], ['get', 'frp'],
-      0, 0.4,    // Low intensity is very see-through
-      50, 0.8,   // High intensity is mostly solid
-      100, 1.0   // Severe intensity is 100% solid
-    ],
+    // Solid opacity so points don't look washed out
+    'circle-opacity': 1.0, 
     
-    // Only give the worst fires a border so they pop out
+    // Dark outline toseparate the points from the light map background
     'circle-stroke-width': [
-      'step', ['get', 'frp'],
-      0,       // No border for FRP < 50
-      50, 1.5, // 1.5px border for FRP > 50
-      100, 2   // 2px border for the absolute worst ones
+      'interpolate', ['linear'], ['zoom'],
+      3, 0.5,
+      8, 1.5
     ],
-    
-    // A dark outline for the White-Hot fires, and a white outline for everything else
-    'circle-stroke-color': [
-      'step', ['get', 'frp'],
-      '#ffffff', 
-      300, '#000000' // Give the white-hot fires a harsh black border
-    ],
+    'circle-stroke-color': '#2d2d2d', 
+    'circle-stroke-opacity': 0.9
   },
 };
 

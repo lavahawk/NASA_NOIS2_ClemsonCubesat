@@ -205,79 +205,97 @@ function App() {
               latitude={selectedFire.lat}
               anchor="bottom"
               onClose={() => setSelectedFire(null)}
+              closeButton={true}
             >
+              {/* SOLID UI: Thick borders and block shadows */}
               <div style={{ 
-                color: '#333', 
-                minWidth: '200px', 
-                fontSize: '13px', 
-                lineHeight: '1.4' 
+                color: '#1a1a1a', 
+                backgroundColor: '#ffffff',
+                border: '2px solid #333', 
+                boxShadow: '4px 4px 0px rgba(0,0,0,1)', 
+                padding: '12px',
+                borderRadius: '2px', 
+                minWidth: '220px', 
+                fontSize: '13px',
+                marginTop: '10px'
               }}>
                 <h3 style={{ 
                   margin: '0 0 8px 0', 
-                  paddingBottom: '4px', 
-                  borderBottom: '1px solid #eee',
-                  color: '#a10d12'
+                  borderBottom: '2px solid #D32F2F', 
+                  color: '#D32F2F', 
+                  paddingBottom: '4px',
+                  textTransform: 'uppercase',
+                  fontSize: '15px'
                 }}>
-                  {selectedFire.props.satellite || 'Satellite Data'}
+                  {selectedFire.props.satellite || 'SENSOR DATA'}
                 </h3>
                 
-                <p style={{ margin: '4px 0' }}>
-                  <strong>Type:</strong> {selectedFire.isPolygon ? 'Fire Perimeter' : 'Hotspot Point'}
-                </p>
-                
-                <p style={{ margin: '4px 0' }}>
-                  <strong>FRP:</strong> {selectedFire.props.frp ?? 'N/A'} MW
-                </p>
-                
-                <p style={{ margin: '4px 0' }}>
-                  <strong>Confidence:</strong> {selectedFire.props.confidence ?? 'N/A'}
-                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontWeight: 'bold', margin: '8px 0' }}>
+                  <p style={{ margin: 0 }}>FRP: {selectedFire.props.frp ?? 'N/A'} MW</p>
+                  <p style={{ margin: 0 }}>CONF: {selectedFire.props.confidence ?? 'N/A'}</p>
+                </div>
 
-                {/*NASA FIRMS original fields - ensure they are displayed if present*/}
-                <p style={{ margin: '4px 0' }}>
-                  <strong>Instrument:</strong> {selectedFire.props.instrument || 'N/A'}
-                </p>
-                
-                <p style={{ margin: '4px 0' }}>
-                  <strong>Detected:</strong> {selectedFire.props.acq_date} | {selectedFire.props.acq_time} UTC
-                </p>
-                
-                <p style={{ margin: '4px 0' }}>
-                  <strong>Period:</strong> {selectedFire.props.daynight === 'D' ? '☀️ Day' : '🌙 Night'}
-                </p>
-
-                {selectedFire.props.bright_ti4 && (
-                  <p style={{ margin: '4px 0', color: '#f86909' }}>
-                    <strong>Brightness (T4):</strong> {selectedFire.props.bright_ti4} K
-                  </p>
-                )}
+                <div style={{ backgroundColor: '#f0f0f0', padding: '8px', marginTop: '10px', border: '1px solid #333' }}>
+                  <p style={{ margin: '2px 0' }}><strong>Instrument:</strong> {selectedFire.props.instrument || 'N/A'}</p>
+                  <p style={{ margin: '2px 0' }}><strong>Time:</strong> {selectedFire.props.acq_date} {selectedFire.props.acq_time}</p>
+                  <p style={{ margin: '2px 0' }}><strong>Period:</strong> {selectedFire.props.daynight === 'D' ? '☀️ DAY' : '🌙 NIGHT'}</p>
+                  {selectedFire.props.bright_ti4 && (
+                    <p style={{ margin: '2px 0' }}><strong>Brightness:</strong> {selectedFire.props.bright_ti4} K</p>
+                  )}
+                </div>
               </div>
             </Popup>
           )}
         </Map>
 
         {hoverCoords && (
-          <div
-            style={{
-              position: 'absolute', bottom: '20px', left: '20px', zIndex: 10,
-              backgroundColor: 'rgba(0, 0, 0, 0.75)', color: '#fff',
-              padding: '8px 12px', borderRadius: '6px', fontFamily: 'monospace',
-            }}
-          >
-            Lng: {hoverCoords.lng.toFixed(4)} | Lat: {hoverCoords.lat.toFixed(4)}
+          <div style={{
+            position: 'absolute', bottom: '20px', left: '20px', zIndex: 10,
+            backgroundColor: '#ffffff', color: '#000', border: '2px solid #333',
+            padding: '6px 12px', fontWeight: 'bold', fontFamily: 'monospace',
+            boxShadow: '3px 3px 0px rgba(0,0,0,1)'
+          }}>
+            LNG: {hoverCoords.lng.toFixed(4)} | LAT: {hoverCoords.lat.toFixed(4)}
           </div>
         )}
 
         <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', gap: '10px' }}>
-          <button onClick={() => setShowGrid(!showGrid)} style={{ padding: '12px', background: showGrid ? '#ff8c00' : 'white', borderRadius: '8px' }}>
-            Grid Lines: {showGrid ? 'ON' : 'OFF'}
+          <button onClick={() => setShowGrid(!showGrid)} style={{ 
+            padding: '10px 15px', 
+            background: showGrid ? '#333' : 'white', 
+            color: showGrid ? 'white' : 'black',
+            border: '2px solid #333',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+            boxShadow: '2px 2px 0px rgba(0,0,0,1)'
+          }}>
+            GRID: {showGrid ? 'ON' : 'OFF'}
           </button>
-          <button onClick={() => setIsGlobe(!isGlobe)} style={{ padding: '12px', background: 'white', borderRadius: '8px' }}>
-            {isGlobe ? 'Switch to 2D' : 'Switch to 3D'}
+          <button onClick={() => setIsGlobe(!isGlobe)} style={{ 
+            padding: '10px 15px', 
+            background: 'white', 
+            color: 'black',
+            border: '2px solid #333',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+            boxShadow: '2px 2px 0px rgba(0,0,0,1)'
+          }}>
+            {isGlobe ? '2D MODE' : '3D MODE'}
           </button>
           {!isDashboardOpen && (
-            <button onClick={() => setIsDashboardOpen(true)} style={{ padding: '12px', backgroundColor: '#333', color: 'white', borderRadius: '8px' }}>
-              Enter Dashboard
+            <button onClick={() => setIsDashboardOpen(true)} style={{ 
+              padding: '10px 15px', 
+              background: '#333', 
+              color: 'white',
+              border: '2px solid #333',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              boxShadow: '2px 2px 0px rgba(0,0,0,1)'
+            }}>
+              OPEN DASHBOARD
             </button>
           )}
         </div>

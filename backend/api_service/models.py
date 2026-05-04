@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
+from typing import Any
 
 
 @dataclass(slots=True, frozen=True)
@@ -43,6 +44,14 @@ class PointsQuery:
 
 
 @dataclass(slots=True, frozen=True)
+class PerimetersQuery:
+    start_time: datetime
+    end_time: datetime
+    bbox: BBox
+    merged: bool = False
+
+
+@dataclass(slots=True, frozen=True)
 class PointRecord:
     id: UUID | str
     source_key: str
@@ -61,6 +70,18 @@ class PointRecord:
     scan: float | None
     track: float | None
     daynight: str | None
+
+
+@dataclass(slots=True, frozen=True)
+class PerimeterRecord:
+    id: UUID | str
+    created_at: datetime
+    updated_at: datetime
+    first_detection_time: datetime
+    latest_detection_time: datetime
+    detection_count: int
+    merged: bool
+    geometry: dict[str, Any]
 
 
 @dataclass(slots=True, frozen=True)

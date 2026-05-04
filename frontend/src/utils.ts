@@ -1,5 +1,6 @@
 import type { FireProperties, FireCollection } from './types';
 import { emptyFireCollection } from './types';
+import maplibregl from 'maplibre-gl';
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 export const DEFAULT_BBOX = '-179.2,18.9,-66.9,71.4';
@@ -51,16 +52,65 @@ export function getPrevious24HoursQuery() {
 }
 
 export function normalizePointsResponse(data: any): FireCollection {
-  // 确保所有从 backend/firms/firms_client.py 传来的字段都被保留
   const features = data?.features || data?.points?.features || data?.points || [];
   if (Array.isArray(features)) {
-    return { 
-      type: 'FeatureCollection', 
-      features: features.map((f: any) => ({ 
-        ...f, 
-        type: 'Feature' 
-      })) 
+    return {
+      type: 'FeatureCollection',
+      features: features.map((f: any) => ({
+        ...f,
+        type: 'Feature'
+      }))
     };
   }
   return emptyFireCollection;
+}
+
+export function normalizeFeatureCollection(data: any): FireCollection {
+  const features = data?.features || data?.points?.features || data?.points || [];
+  if (Array.isArray(features)) {
+    return {
+      type: 'FeatureCollection',
+      features: features.map((f: any) => ({
+        ...f,
+        type: 'Feature'
+      }))
+    };
+  }
+  return emptyFireCollection;
+}
+
+export function getBboxForQuery(bounds: maplibregl.LngLatBounds | null): string {
+  if (!bounds) return DEFAULT_BBOX;
+  return [
+    bounds.getWest(),
+    bounds.getSouth(),
+    bounds.getEast(),
+    bounds.getNorth(),
+  ].join(',');
+}
+
+export function getFeatureCenter(feature: GeoJSON.Feature<GeoJSON.Geometry, FireProperties>) {
+  const geometry = feature.geometry;
+  if (!geometry) return null;
+
+  if (geometry.type === 'Point') {
+    const [lng, lat] = geometry.coordinates as [number, number];
+    return { lng, lat };
+  }
+
+  if (geometry.type === 'Polygon') {
+    const firstRing = geometry.coordinates?.[0];
+    if (!firstRing?.length) return null;
+    const [lng, lat] = firstRing[0] as [number, number];
+    return { lng, lat };
+  }
+
+  if (geometry.type === 'MultiPolygon') {
+    const firstRing = geometry.coordinates?.[0]?.[0];
+    if (!firstRing?.length) return null;
+    const [lng, lat] = firstRing[0] as [number, number];
+    return { lng, lat };
+  }
+
+  return null;
 }

@@ -15,7 +15,6 @@ import xarray as xr
 from .cache import CacheManager
 from .errors import GridMETCacheError, GridMETDataError, GridMETDownloadError
 
-
 class GridMETClient:
     """Client for point lookups against yearly GridMET NetCDF files."""
 
@@ -85,11 +84,25 @@ class GridMETClient:
         elif self._active_dataset_name == dataset_name and self._active_year == current_year and self._active_dataset is None:
             self._ensure_loaded(dataset_name, current_year)
 
-    def clear(self) -> None:
-        self._close_active_dataset()
-        self._freshness.clear()
-        self._cache.clear()
-        self._cache = CacheManager(create_immediately=False)
+    def clear_cache(self, start_year: int | None = None, end_year: int | None = None) -> None:
+        if self._active_year is not None:
+            in_range = True
+            if start_year is not None and self._active_year < start_year:
+                in_range = False
+            if end_year is not None and self._active_year > end_year:
+                in_range = False
+            if in_range:
+                self._close_active_dataset()
+
+        keys_to_remove = [
+            (dataset, year)
+            for dataset, year in self._freshness
+            if (start_year is None or year >= start_year) and (end_year is None or year <= end_year)
+        ]
+        for key in keys_to_remove:
+            self._freshness.pop(key, None)
+
+        self._cache.clear_cache(start_year, end_year)
 
     @property
     def cache_root(self) -> Path:
@@ -112,7 +125,7 @@ class GridMETClient:
         with contextlib.suppress(Exception):
             self._close_active_dataset()
         with contextlib.suppress(Exception):
-            self._cache.clear()
+            self._cache.clear_cache()
 
     def _validate_dataset(self, dataset: str) -> str:
         if not isinstance(dataset, str) or not dataset:

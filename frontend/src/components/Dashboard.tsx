@@ -1,5 +1,7 @@
 import React from 'react';
 import type { FireProperties, FireCollection } from '../types';
+import maplibregl from 'maplibre-gl';
+import { getBboxForQuery } from '../utils';
 
 interface DashboardProps {
   isDashboardOpen: boolean;
@@ -9,11 +11,18 @@ interface DashboardProps {
   showPerimeters: boolean;
   setShowPerimeters: (show: boolean) => void;
   visibleWildfires: GeoJSON.Feature<GeoJSON.Geometry, FireProperties>[];
+  visiblePerimeters: GeoJSON.Feature<GeoJSON.Geometry, FireProperties>[];
   wildfires: FireCollection;
+  perimeters: FireCollection;
   loading: boolean;
+  perimetersLoading: boolean;
   debugMessage: string;
+  perimeterDebugMessage: string;
   queryPreview: { startTime: string; endTime: string; bbox: string };
+  bounds: maplibregl.LngLatBounds | null;
   flyToFire: (lng: number, lat: number, props: FireProperties) => void;
+  getFeatureCenter: (feature: GeoJSON.Feature<GeoJSON.Geometry, FireProperties>) => { lng: number; lat: number } | null;
+  setSelectedFire: (fire: { lng: number; lat: number; props: FireProperties; geometryType?: string } | null) => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({
@@ -24,11 +33,18 @@ const Dashboard: React.FC<DashboardProps> = ({
   showPerimeters,
   setShowPerimeters,
   visibleWildfires,
+  visiblePerimeters,
   wildfires,
+  perimeters,
   loading,
+  perimetersLoading,
   debugMessage,
+  perimeterDebugMessage,
   queryPreview,
+  bounds,
   flyToFire,
+  getFeatureCenter,
+  setSelectedFire,
 }) => {
   if (!isDashboardOpen) {
     return null;
@@ -50,7 +66,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         <h4 style={{ margin: '0 0 10px 0', color: '#e65100', fontSize: '16px' }}>📡 Live API Params</h4>
         <div style={{ fontSize: '13px', fontFamily: 'monospace', lineHeight: '1.6' }}>
           <strong style={{ color: '#333' }}>BBOX:</strong><br />
-          <span style={{ color: '#d32f2f' }}>{queryPreview.bbox}</span><br />
+          <span style={{ color: '#d32f2f' }}>{getBboxForQuery(bounds) || queryPreview.bbox}</span><br />
           <strong style={{ color: '#333' }}>Range:</strong><br />
           Previous 24h UTC
         </div>
@@ -92,44 +108,52 @@ const Dashboard: React.FC<DashboardProps> = ({
       <div style={{ marginTop: '20px', padding: '15px', backgroundColor: 'white', borderRadius: '8px', flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <h3 style={{ margin: '0 0 10px 0' }}>Statistics</h3>
         <p style={{ fontWeight: 'bold' }}>
-          Visible in Map: {loading ? 'Loading...' : visibleWildfires.length} 
+          Visible Hotspots: {loading ? 'Loading...' : visibleWildfires.length}
           <span style={{ fontWeight: 'normal', fontSize: '12px', marginLeft: '5px', color: '#6b7280' }}>
              (Total: {wildfires.features.length})
+          </span>
+        </p>
+        <p style={{ fontWeight: 'bold' }}>
+          Visible Perimeters: {perimetersLoading ? 'Loading...' : visiblePerimeters.length}
+          <span style={{ fontWeight: 'normal', fontSize: '12px', marginLeft: '5px', color: '#6b7280' }}>
+             (Total: {perimeters.features.length})
           </span>
         </p>
         <p style={{ fontSize: '12px', color: '#4b5563', marginTop: 0 }}>
           Debug: {debugMessage}
         </p>
+        <p style={{ fontSize: '12px', color: '#4b5563', marginTop: 0 }}>
+          Perimeters: {perimeterDebugMessage}
+        </p>
 
         <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {visibleWildfires.map((f: any, i: number) => {
-            const lng = f.geometry?.coordinates?.[0];
-            const lat = f.geometry?.coordinates?.[1];
+            const center = getFeatureCenter(f);
 
             return (
-              <div 
-                key={i} 
+              <div
+                key={i}
                 onClick={() => {
-                  if (lng !== undefined && lat !== undefined) {
-                    flyToFire(lng, lat, f.properties);
+                  if (center) {
+                    flyToFire(center.lng, center.lat, f.properties);
                   }
                 }}
-                style={{ 
-                  padding: '10px', 
-                  backgroundColor: '#f8f9fa', 
-                  border: '1px solid #e5e7eb', 
-                  borderRadius: '6px', 
+                style={{
+                  padding: '10px',
+                  backgroundColor: '#f8f9fa',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '6px',
                   fontSize: '12px',
                   cursor: 'pointer',
                   transition: 'border-color 0.2s, background-color 0.2s'
                 }}
-                onMouseOver={(e) => { 
-                  e.currentTarget.style.borderColor = '#ff4d4d'; 
-                  e.currentTarget.style.backgroundColor = 'white'; 
+                onMouseOver={(e) => {
+                  e.currentTarget.style.borderColor = '#ff4d4d';
+                  e.currentTarget.style.backgroundColor = 'white';
                 }}
-                onMouseOut={(e) => { 
-                  e.currentTarget.style.borderColor = '#e5e7eb'; 
-                  e.currentTarget.style.backgroundColor = '#f8f9fa'; 
+                onMouseOut={(e) => {
+                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.backgroundColor = '#f8f9fa';
                 }}
               >
                 <strong>ID: #{String(f?.properties?.id ?? i).substring(0, 8)}</strong>
@@ -142,6 +166,51 @@ const Dashboard: React.FC<DashboardProps> = ({
             <div style={{ padding: '10px', textAlign: 'center', color: '#6b7280' }}>
               Pan or zoom to find hotspots.
             </div>
+          )}
+          {!perimetersLoading && visiblePerimeters.length > 0 && showPerimeters && (
+            <>
+              {visiblePerimeters.map((f: any, i: number) => {
+                const center = getFeatureCenter(f);
+
+                return (
+                  <div
+                    key={`perimeter-${i}`}
+                    onClick={() => {
+                      if (center) {
+                        flyToFire(center.lng, center.lat, f.properties);
+                        setSelectedFire({
+                          lng: center.lng,
+                          lat: center.lat,
+                          props: f.properties ?? {},
+                          geometryType: f.geometry?.type,
+                        });
+                      }
+                    }}
+                    style={{
+                      padding: '10px',
+                      backgroundColor: '#eef2ff',
+                      border: '1px solid #c7d2fe',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      transition: 'border-color 0.2s, background-color 0.2s'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.borderColor = '#4d4dff';
+                      e.currentTarget.style.backgroundColor = 'white';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.borderColor = '#c7d2fe';
+                      e.currentTarget.style.backgroundColor = '#eef2ff';
+                    }}
+                  >
+                    <strong>Perimeter #{String(f?.properties?.id ?? i).substring(0, 8)}</strong>
+                    <br />
+                    Latest: <span style={{ color: '#3730a3', fontWeight: 'bold' }}>{f?.properties?.latest_detection_time ?? 'N/A'}</span>
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
       </div>

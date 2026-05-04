@@ -12,6 +12,7 @@ from .config import WorkerConfig
 from .migrations import MigrationRunner
 from .models import NormalizedPoint
 from .normalization import NormalizationError, normalize_frame
+from .perimeters import FirePerimeterGenerator, PostgresFirePerimeterStore
 from .storage import PointsWriter, PostgresPointsWriter, create_psycopg_connection_factory
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ class BackgroundWorker:
         client: FirmsClient | None = None,
         writer: PointsWriter | None = None,
         migration_runner: MigrationRunner | None = None,
+        perimeter_generator: FirePerimeterGenerator | None = None,
     ) -> None:
         self.config = config
         self.client = client or FirmsClient(map_key=config.map_key)
@@ -33,6 +35,10 @@ class BackgroundWorker:
         self.migration_runner = migration_runner or MigrationRunner(
             connection_factory,
             config.migrations_dir,
+        )
+        self.perimeter_generator = perimeter_generator or FirePerimeterGenerator(
+            config,
+            PostgresFirePerimeterStore(connection_factory),
         )
 
     def run_forever(self) -> None:
@@ -120,6 +126,22 @@ class BackgroundWorker:
             normalized_points.extend(source_points)
 
         inserted = self.writer.insert_points(normalized_points)
+        perimeter_summary = {
+            "perimeter_points_eligible": 0,
+            "perimeter_clusters": 0,
+            "perimeters_created": 0,
+            "perimeters_updated": 0,
+            "perimeters_consolidated": 0,
+            "perimeter_clusters_skipped": 0,
+        }
+
+        # Comment out this block to disable perimeter generation without changing point ingestion.
+        if self.perimeter_generator is not None:
+            perimeter_summary = self.perimeter_generator.process_cycle(
+                normalized_points,
+                cycle_time=ingest_time,
+            )
+
         summary = {
             "sources_total": len(self.config.sources),
             "sources_failed": failed_sources,
@@ -128,6 +150,7 @@ class BackgroundWorker:
             "points_seen": len(normalized_points),
             "points_inserted": inserted,
         }
+        summary.update(perimeter_summary)
         logger.info("Completed ingestion cycle: %s", summary)
         return summary
 

@@ -12,22 +12,32 @@ from background_worker.storage import create_psycopg_connection_factory
 from .config import ApiConfig
 from .cursor import encode_cursor
 from .errors import DatabaseUnavailableError, QueryValidationError
-from .models import PointRecord
-from .query_parser import parse_points_query
-from .repository import PointsRepository, PostgresPointsRepository
+from .models import PerimeterRecord, PointRecord
+from .query_parser import parse_perimeters_query, parse_points_query
+from .repository import (
+    PerimetersRepository,
+    PointsRepository,
+    PostgresPerimetersRepository,
+    PostgresPointsRepository,
+)
 
 
 def create_app(
     config: ApiConfig | None = None,
     *,
     repository: PointsRepository | None = None,
+    perimeters_repository: PerimetersRepository | None = None,
 ) -> FastAPI:
     config = config or ApiConfig.from_env()
     repository = repository or PostgresPointsRepository(create_psycopg_connection_factory(config.database_dsn))
+    perimeters_repository = perimeters_repository or PostgresPerimetersRepository(
+        create_psycopg_connection_factory(config.database_dsn)
+    )
 
     app = FastAPI()
     app.state.api_config = config
     app.state.points_repository = repository
+    app.state.perimeters_repository = perimeters_repository
 
     if config.allowed_origins:
         app.add_middleware(
@@ -77,6 +87,17 @@ def create_app(
             "has_more": page.has_more,
         }
 
+    @app.get("/v1/perimeters")
+    async def get_perimeters(request: Request) -> dict[str, Any]:
+        raw_query = dict(request.query_params.multi_items())
+        query = parse_perimeters_query(raw_query, config)
+        records = perimeters_repository.fetch_perimeters(query)
+
+        return {
+            "type": "FeatureCollection",
+            "features": [_perimeter_to_feature(record) for record in records],
+        }
+
     return app
 
 
@@ -113,3 +134,19 @@ def _record_to_feature(record: PointRecord) -> dict[str, Any]:
 
 def _to_utc_iso(value: datetime) -> str:
     return value.isoformat()
+
+
+def _perimeter_to_feature(record: PerimeterRecord) -> dict[str, Any]:
+    return {
+        "type": "Feature",
+        "geometry": record.geometry,
+        "properties": {
+            "id": str(record.id),
+            "created_at": _to_utc_iso(record.created_at),
+            "updated_at": _to_utc_iso(record.updated_at),
+            "first_detection_time": _to_utc_iso(record.first_detection_time),
+            "latest_detection_time": _to_utc_iso(record.latest_detection_time),
+            "detection_count": record.detection_count,
+            "merged": record.merged,
+        },
+    }

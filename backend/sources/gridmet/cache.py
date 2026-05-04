@@ -42,16 +42,47 @@ class CacheManager:
         except OSError as exc:
             raise GridMETCacheError(f"Failed to replace cached file '{destination}'.") from exc
 
-    def clear(self) -> None:
+    def clear_cache(self, start_year: int | None = None, end_year: int | None = None) -> None:
         root = self._root
-        self._root = None
-        if root is None:
+        if root is None or not root.exists():
+            self._root = None
             return
-        try:
-            if root.exists():
+
+        if start_year is None and end_year is None:
+            try:
                 shutil.rmtree(root)
+                self._root = None
+            except OSError as exc:
+                raise GridMETCacheError(f"Failed to remove cache root '{root}'.") from exc
+            return
+
+        try:
+            for dataset_dir in root.iterdir():
+                if not dataset_dir.is_dir():
+                    continue
+                
+                for file_path in dataset_dir.glob("*.nc"):
+                    # Extract year from filename, e.g., "fm1000_2026.nc"
+                    parts = file_path.stem.split('_')
+                    if len(parts) >= 2 and parts[-1].isdigit():
+                        year = int(parts[-1])
+                        in_range = True
+                        if start_year is not None and year < start_year:
+                            in_range = False
+                        if end_year is not None and year > end_year:
+                            in_range = False
+                        
+                        if in_range:
+                            file_path.unlink()
+
+                if not any(dataset_dir.iterdir()):
+                    dataset_dir.rmdir()
+
+            if not any(root.iterdir()):
+                root.rmdir()
+                self._root = None
         except OSError as exc:
-            raise GridMETCacheError(f"Failed to remove cache root '{root}'.") from exc
+            raise GridMETCacheError(f"Failed to selectively clear cache root '{root}'.") from exc
 
     def _ensure_root(self) -> Path:
         if self._root is not None:

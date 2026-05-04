@@ -9,7 +9,15 @@ from fastapi.testclient import TestClient
 from api_service.app import create_app
 from api_service.config import ApiConfig
 from api_service.cursor import encode_cursor
-from api_service.models import BBox, CursorBoundary, PointRecord, PointsPage, PointsQuery
+from api_service.models import (
+    BBox,
+    CursorBoundary,
+    PerimeterRecord,
+    PerimetersQuery,
+    PointRecord,
+    PointsPage,
+    PointsQuery,
+)
 
 
 class FakePointsRepository:
@@ -22,6 +30,16 @@ class FakePointsRepository:
         self.last_query = query
         self.last_page_size = page_size
         return self.page
+
+
+class FakePerimetersRepository:
+    def __init__(self, records: list[PerimeterRecord] | None = None) -> None:
+        self.records = records or []
+        self.last_query: PerimetersQuery | None = None
+
+    def fetch_perimeters(self, query: PerimetersQuery) -> list[PerimeterRecord]:
+        self.last_query = query
+        return self.records
 
 
 def sample_record(
@@ -50,8 +68,39 @@ def sample_record(
     )
 
 
+def sample_perimeter_record(*, merged: bool = False) -> PerimeterRecord:
+    return PerimeterRecord(
+        id=uuid4(),
+        created_at=datetime(2026, 4, 16, 15, 35, tzinfo=UTC),
+        updated_at=datetime(2026, 4, 17, 15, 35, tzinfo=UTC),
+        first_detection_time=datetime(2026, 4, 16, 15, 30, tzinfo=UTC),
+        latest_detection_time=datetime(2026, 4, 17, 16, 15, tzinfo=UTC),
+        detection_count=4,
+        merged=merged,
+        geometry={
+            "type": "MultiPolygon",
+            "coordinates": [
+                [
+                    [
+                        [-114.92, 36.35],
+                        [-114.90, 36.35],
+                        [-114.90, 36.37],
+                        [-114.92, 36.37],
+                        [-114.92, 36.35],
+                    ]
+                ]
+            ],
+        },
+    )
+
+
 class FastApiTests(unittest.TestCase):
-    def _build_client(self, repository: FakePointsRepository) -> TestClient:
+    def _build_client(
+        self,
+        repository: FakePointsRepository | None = None,
+        *,
+        perimeters_repository: FakePerimetersRepository | None = None,
+    ) -> TestClient:
         app = create_app(
             ApiConfig(
                 database_dsn="postgresql://unused",
@@ -59,7 +108,8 @@ class FastApiTests(unittest.TestCase):
                 max_time_range_days=10,
                 allowed_origins=("http://localhost:3000",),
             ),
-            repository=repository,
+            repository=repository or FakePointsRepository(),
+            perimeters_repository=perimeters_repository or FakePerimetersRepository(),
         )
         return TestClient(app)
 
@@ -205,6 +255,59 @@ class FastApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["access-control-allow-origin"], "http://localhost:3000")
+
+    def test_get_perimeters_returns_feature_collection(self) -> None:
+        repository = FakePerimetersRepository([sample_perimeter_record()])
+        client = self._build_client(perimeters_repository=repository)
+
+        response = client.get(
+            "/v1/perimeters",
+            params={
+                "start_time": "2026-04-16T00:00:00Z",
+                "end_time": "2026-04-20T23:59:00Z",
+                "bbox": "-125,30,-110,40",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["type"], "FeatureCollection")
+        self.assertEqual(len(body["features"]), 1)
+        self.assertEqual(body["features"][0]["geometry"]["type"], "MultiPolygon")
+        self.assertFalse(repository.last_query.merged)
+
+    def test_get_perimeters_accepts_merged_true_filter(self) -> None:
+        repository = FakePerimetersRepository()
+        client = self._build_client(perimeters_repository=repository)
+
+        response = client.get(
+            "/v1/perimeters",
+            params={
+                "start_time": "2026-04-16T00:00:00Z",
+                "end_time": "2026-04-20T23:59:00Z",
+                "bbox": "-125,30,-110,40",
+                "merged": "true",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(repository.last_query.merged)
+
+    def test_get_perimeters_rejects_invalid_merged_value(self) -> None:
+        client = self._build_client()
+
+        response = client.get(
+            "/v1/perimeters",
+            params={
+                "start_time": "2026-04-16T00:00:00Z",
+                "end_time": "2026-04-20T23:59:00Z",
+                "bbox": "-125,30,-110,40",
+                "merged": "maybe",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["parameter"], "merged")
 
 
 if __name__ == "__main__":

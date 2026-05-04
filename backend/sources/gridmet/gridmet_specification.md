@@ -172,30 +172,34 @@ Required behavior:
 API intent:
 
 - these helpers are for observability, debugging, and tests
-- `cache_root_if_present` exists specifically so callers can verify `clear()` behavior without recreating a cache root as a side effect
+- `cache_root_if_present` exists specifically so callers can verify `clear_cache()` behavior without recreating a cache root as a side effect
 
-### Clear Method
+### Clear Cache Method
 
-The client must expose an explicit method for releasing all local resources:
+The client must expose an explicit method for releasing local resources:
 
 ```python
-clear() -> None
+clear_cache(start_year: int | None = None, end_year: int | None = None) -> None
 ```
 
 Required behavior:
 
-- `clear()` must close any currently loaded in-memory dataset handle
-- `clear()` must delete all cached dataset files under the client-owned cache root
-- `clear()` must delete the client-owned cache root directory itself
-- After `clear()` returns, the client must hold no open dataset handles
-- `clear()` must be safe to call more than once
-- After `clear()` returns, the client remains usable
-- The next call to `sel(...)` or `refresh_latest(...)` must recreate a new client-owned temporary cache root automatically
+- `clear_cache()` closes any currently loaded in-memory dataset handle if its year is within the clearing interval.
+- `clear_cache()` deletes cached dataset files under the client-owned cache root that fall within the clearing interval.
+- If both `start_year` and `end_year` are specified, every cached dataset inclusive between the years is deleted.
+- If only `start_year` is provided, every cached dataset from that start year inclusive onwards is deleted.
+- If only `end_year` is provided, every cached dataset before and including the end year is deleted.
+- If no years are provided, all cached dataset files are deleted.
+- `clear_cache()` must delete the client-owned cache root directory itself only if every cached file is no longer present after clearing.
+- After `clear_cache()` returns, the client must hold no open dataset handles for datasets within the clearing interval.
+- `clear_cache()` must be safe to call more than once.
+- After `clear_cache()` returns, the client remains usable.
+- The next call to `sel(...)` or `refresh_latest(...)` must recreate a new client-owned temporary cache root automatically if it was deleted.
 
 API intent:
 
-- `clear()` is the primary cleanup entry point for deterministic resource release
-- Destructor-driven cleanup is a fallback only and should delegate to the same cleanup logic when possible
+- `clear_cache()` is the primary cleanup entry point for deterministic resource release.
+- Destructor-driven cleanup is a fallback only and should delegate to the same cleanup logic with no years specified when possible.
 
 ## Functional Requirements
 
@@ -268,15 +272,15 @@ Temporary-cache requirements:
 
 ### 4. Temporary Cache Cleanup
 
-When the client is cleared, all client-owned cached files and directories must be removed. If the client goes out of scope without an explicit `clear()`, the destructor should attempt the same cleanup on a best-effort basis.
+When the client is cleared, all client-owned cached files and directories must be removed. If the client goes out of scope without an explicit `clear_cache()`, the destructor should attempt the same cleanup on a best-effort basis.
 
 Requirements:
 
-- `clear()` must attempt to close any open in-memory dataset handles before deleting cached files
-- `clear()` must delete the entire client-owned temporary cache directory recursively
-- Destructor-based cleanup should call the same cleanup routine as `clear()` when possible
+- `clear_cache()` must attempt to close any open in-memory dataset handles before deleting cached files
+- `clear_cache()` must delete the entire client-owned temporary cache directory recursively
+- Destructor-based cleanup should call the same cleanup routine as `clear_cache()` when possible
 - Cleanup must be idempotent and must not fail simply because the cache directory is already absent
-- After `clear()`, the client must be able to lazily recreate a new temporary cache directory on the next operation that requires caching
+- After `clear_cache()`, the client must be able to lazily recreate a new temporary cache directory on the next operation that requires caching
 
 ### 5. In-Memory Dataset Reuse
 
@@ -458,7 +462,7 @@ The implementation may include helpers such as:
 - `_replace_cache_file(dataset: str, year: int, source_path: Path) -> Path`
 - `_download_to_cache(dataset: str, year: int) -> Path`
 - `_refresh_latest(dataset: str) -> None`
-- `_clear() -> None`
+- `_clear_cache() -> None`
 - `_load_year(dataset: str, year: int) -> xr.Dataset`
 - `_get_primary_variable(ds: xr.Dataset) -> xr.DataArray`
 - `_select_point(ds: xr.Dataset, lat: float, lon: float, year: int | None, day: int | None)`
@@ -473,7 +477,7 @@ These are recommendations, not required public API.
 - Current-year refresh logic must not leave the cache in an inconsistent state
 - The client must behave deterministically for the same cached file and inputs
 - A client-owned temporary cache directory must never resolve to or delete a path outside that client-owned directory
-- `clear()` must leave no open in-memory dataset handle and no remaining client-owned cached files on success
+- `clear_cache()` must leave no open in-memory dataset handle and no remaining client-owned cached files on success
 
 ### Maintainability
 
@@ -492,7 +496,7 @@ The implementation should be testable for:
 - temporary cache directory generation
 - initial download behavior
 - cached reuse behavior
-- explicit `clear()` cleanup behavior
+- explicit `clear_cache()` cleanup behavior
 - destructor fallback cleanup behavior
 - single dataset-year in-memory reuse behavior
 - year switch reload behavior
@@ -514,11 +518,11 @@ The implementation should be testable for:
 - Switching from one year to another replaces the in-memory dataset
 - Switching from one dataset to another replaces the in-memory dataset
 - Cached historical files are reused without redownloading
-- `clear()` closes the active in-memory dataset handle
-- `clear()` deletes cached dataset files and the client-owned cache directory
-- Calling `clear()` twice does not fail
-- `sel(...)` or `refresh_latest(...)` after `clear()` recreates a new cache directory automatically
-- Destroying a client without calling `clear()` attempts the same cleanup on a best-effort basis
+- `clear_cache()` closes the active in-memory dataset handle
+- `clear_cache()` deletes cached dataset files and the client-owned cache directory
+- Calling `clear_cache()` twice does not fail
+- `sel(...)` or `refresh_latest(...)` after `clear_cache()` recreates a new cache directory automatically
+- Destroying a client without calling `clear_cache()` attempts the same cleanup on a best-effort basis
 - `sel(dataset, lat, lon)` uses the current-year file and returns the latest available value
 - `sel(dataset, lat, lon)` falls back to prior years if the current-year file does not exist
 - `sel(dataset, lat, lon)` does not implicitly perform a remote freshness check
@@ -541,9 +545,9 @@ This specification is satisfied when:
 - The client accepts both plain dataset strings and `GridMETDataset` string constants in `sel(...)` and `refresh_latest(...)`
 - Local caching is implemented
 - Cache inspection helpers are implemented
-- `clear()` is implemented for explicit cleanup
-- `clear()` deletes client-owned cached files and cache directories
-- The client remains usable after `clear()`
+- `clear_cache()` is implemented for explicit cleanup
+- `clear_cache()` deletes client-owned cached files and cache directories
+- The client remains usable after `clear_cache()`
 - Only the most recently accessed dataset-year pair is kept loaded in memory
 - `sel(dataset, lat, lon, year, day)` is implemented
 - `sel(dataset, lat, lon)` is implemented

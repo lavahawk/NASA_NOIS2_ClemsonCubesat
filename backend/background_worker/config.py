@@ -23,6 +23,11 @@ class WorkerConfig:
     day_range: int = 1
     sources: tuple[str, ...] = field(default_factory=lambda: DEFAULT_SOURCES)
     migrations_dir: Path = Path("migrations")
+    perimeter_cluster_threshold_km: float = 10.0
+    perimeter_merge_threshold_km: float = 10.0
+    active_fire_window_days: int = 5
+    perimeter_point_buffer_meters: float = 375.0
+    perimeter_smoothing_meters: float = 150.0
 
     @classmethod
     def from_env(cls) -> "WorkerConfig":
@@ -35,4 +40,19 @@ class WorkerConfig:
             database_dsn=database_dsn,
             poll_interval_seconds=poll_interval,
             migrations_dir=migrations_dir,
+            perimeter_cluster_threshold_km=float(
+                os.getenv("WORKER_PERIMETER_CLUSTER_THRESHOLD_KM", "10.0")
+            ),
+            perimeter_merge_threshold_km=float(
+                os.getenv("WORKER_PERIMETER_MERGE_THRESHOLD_KM", "10.0")
+            ),
+            active_fire_window_days=int(
+                os.getenv("WORKER_ACTIVE_FIRE_WINDOW_DAYS", "5")
+            ),
+            perimeter_point_buffer_meters=float(
+                os.getenv("WORKER_PERIMETER_POINT_BUFFER_METERS", "375.0")
+            ),
+            perimeter_smoothing_meters=float(
+                os.getenv("WORKER_PERIMETER_SMOOTHING_METERS", "150.0")
+            ),
         )

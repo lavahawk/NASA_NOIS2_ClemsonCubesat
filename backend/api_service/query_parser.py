@@ -6,7 +6,7 @@ from uuid import UUID
 from .config import ApiConfig
 from .cursor import decode_cursor
 from .errors import QueryValidationError
-from .models import BBox, PointsQuery
+from .models import BBox, PerimetersQuery, PointsQuery
 
 SUPPORTED_PARAMETERS = {
     "start_time",
@@ -51,6 +51,13 @@ DATETIME_RANGE_FILTERS = {
     "updated_at": ("updated_at_start", "updated_at_end"),
 }
 
+PERIMETERS_SUPPORTED_PARAMETERS = {
+    "start_time",
+    "end_time",
+    "bbox",
+    "merged",
+}
+
 
 def parse_points_query(raw_query: dict[str, str], config: ApiConfig) -> PointsQuery:
     _reject_unsupported_parameters(raw_query)
@@ -89,9 +96,34 @@ def parse_points_query(raw_query: dict[str, str], config: ApiConfig) -> PointsQu
     return query
 
 
-def _reject_unsupported_parameters(raw_query: dict[str, str]) -> None:
+def parse_perimeters_query(raw_query: dict[str, str], config: ApiConfig) -> PerimetersQuery:
+    _reject_unsupported_parameters(raw_query, supported_parameters=PERIMETERS_SUPPORTED_PARAMETERS)
+
+    start_time = _parse_utc_datetime(raw_query.get("start_time"), parameter="start_time", required=True)
+    end_time = _parse_utc_datetime(raw_query.get("end_time"), parameter="end_time", required=True)
+    if start_time > end_time:
+        raise QueryValidationError("start_time must be less than or equal to end_time", parameter="start_time")
+    if end_time - start_time > timedelta(days=config.max_time_range_days):
+        raise QueryValidationError(
+            f"time window must not exceed {config.max_time_range_days} days",
+            parameter="end_time",
+        )
+
+    return PerimetersQuery(
+        start_time=start_time,
+        end_time=end_time,
+        bbox=_parse_bbox(raw_query.get("bbox")),
+        merged=_parse_bool(raw_query.get("merged"), parameter="merged", default=False),
+    )
+
+
+def _reject_unsupported_parameters(
+    raw_query: dict[str, str],
+    *,
+    supported_parameters: set[str] = SUPPORTED_PARAMETERS,
+) -> None:
     for key in raw_query:
-        if key not in SUPPORTED_PARAMETERS:
+        if key not in supported_parameters:
             raise QueryValidationError("unsupported query parameter", parameter=key)
 
 
@@ -172,3 +204,15 @@ def _parse_float(value: str, *, parameter: str) -> float:
         return float(value)
     except ValueError as exc:
         raise QueryValidationError(f"{parameter} must be numeric", parameter=parameter) from exc
+
+
+def _parse_bool(value: str | None, *, parameter: str, default: bool) -> bool:
+    if value is None:
+        return default
+
+    normalized = value.strip().lower()
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    raise QueryValidationError(f"{parameter} must be either true or false", parameter=parameter)

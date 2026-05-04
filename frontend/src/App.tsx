@@ -18,15 +18,21 @@ import {
   getPrevious24HoursQuery,
   buildLatLonGrid,
   normalizePointsResponse,
+  normalizeFeatureCollection,
+  getBboxForQuery,
+  getFeatureCenter,
 } from './utils';
 import Dashboard from './components/Dashboard';
 
 function App() {
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const activeFetchIdRef = useRef(0);
+  const activePointsFetchIdRef = useRef(0);
+  const activePerimetersFetchIdRef = useRef(0);
 
   const [wildfires, setWildfires] = useState<FireCollection>(emptyFireCollection);
+  const [perimeters, setPerimeters] = useState<FireCollection>(emptyFireCollection);
   const [loading, setLoading] = useState(false);
+  const [perimetersLoading, setPerimetersLoading] = useState(false);
   const [bounds, setBounds] = useState<maplibregl.LngLatBounds | null>(null);
 
   const [showHotspots, setShowHotspots] = useState(true);
@@ -36,21 +42,20 @@ function App() {
   const [showGrid, setShowGrid] = useState(false);
   const [zoom, setZoom] = useState(4);
   const [hoverCoords, setHoverCoords] = useState<{ lng: number; lat: number } | null>(null);
-  
-  const [selectedFire, setSelectedFire] = useState<{ lng: number; lat: number; props: FireProperties; isPolygon: boolean } | null>(null);
-  
+  const [selectedFire, setSelectedFire] = useState<{ lng: number; lat: number; props: FireProperties; geometryType?: string } | null>(null);
   const [debugMessage, setDebugMessage] = useState('No points loaded yet');
+  const [perimeterDebugMessage, setPerimeterDebugMessage] = useState('No perimeters loaded yet');
   const queryPreview = useMemo(() => getPrevious24HoursQuery(), []);
 
   const flyToFire = useCallback((lng: number, lat: number, props: FireProperties) => {
     if (!mapRef.current) return;
     mapRef.current.flyTo({ center: [lng, lat], zoom: 12, essential: true, duration: 2000 });
-    setSelectedFire({ lng, lat, props, isPolygon: false });
+    setSelectedFire({ lng, lat, props });
   }, []);
 
   const fetchNASAData = useCallback(async () => {
-    const fetchId = activeFetchIdRef.current + 1;
-    activeFetchIdRef.current = fetchId;
+    const fetchId = activePointsFetchIdRef.current + 1;
+    activePointsFetchIdRef.current = fetchId;
     setLoading(true);
     setWildfires(emptyFireCollection);
     setDebugMessage('Querying /v1/points...');
@@ -75,7 +80,7 @@ function App() {
         const collection = normalizePointsResponse(data);
 
         allFeatures.push(...collection.features);
-        if (activeFetchIdRef.current !== fetchId) return;
+        if (activePointsFetchIdRef.current !== fetchId) return;
 
         setDebugMessage(`Loaded ${allFeatures.length} points across ${pageCount} page(s)`);
         setWildfires({ type: 'FeatureCollection', features: [...allFeatures] });
@@ -84,21 +89,58 @@ function App() {
         nextCursor = typeof data?.next_cursor === 'string' ? data.next_cursor : null;
       }
     } catch (err) {
-      if (activeFetchIdRef.current === fetchId) {
+      if (activePointsFetchIdRef.current === fetchId) {
         setDebugMessage(err instanceof Error ? err.message : 'API query failed');
       }
     } finally {
-      if (activeFetchIdRef.current === fetchId) setLoading(false);
+      if (activePointsFetchIdRef.current === fetchId) setLoading(false);
     }
   }, []);
+
+  const fetchPerimeterData = useCallback(async () => {
+    const fetchId = activePerimetersFetchIdRef.current + 1;
+    activePerimetersFetchIdRef.current = fetchId;
+    setPerimetersLoading(true);
+    setPerimeterDebugMessage('Querying /v1/perimeters...');
+
+    const query = getPrevious24HoursQuery();
+    const params = new URLSearchParams({
+      start_time: query.startTime,
+      end_time: query.endTime,
+      bbox: getBboxForQuery(bounds),
+    });
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/v1/perimeters?${params.toString()}`);
+      if (!response.ok) throw new Error(`Perimeter API Connection Failed: ${response.status}`);
+
+      const data = await response.json();
+      const collection = normalizeFeatureCollection(data);
+      if (activePerimetersFetchIdRef.current !== fetchId) return;
+
+      setPerimeters(collection);
+      setPerimeterDebugMessage(`Loaded ${collection.features.length} perimeter(s) from /v1/perimeters`);
+    } catch (err) {
+      if (activePerimetersFetchIdRef.current === fetchId) {
+        setPerimeterDebugMessage(err instanceof Error ? err.message : 'Perimeter API query failed');
+        setPerimeters(emptyFireCollection);
+      }
+    } finally {
+      if (activePerimetersFetchIdRef.current === fetchId) setPerimetersLoading(false);
+    }
+  }, [bounds]);
 
   useEffect(() => {
     fetchNASAData();
   }, [fetchNASAData]);
 
   useEffect(() => {
+    fetchPerimeterData();
+  }, [fetchPerimeterData]);
+
+  useEffect(() => {
     if (!selectedFire) return;
-    const isPolygon = selectedFire.isPolygon; 
+    const isPolygon = selectedFire.geometryType === 'Polygon' || selectedFire.geometryType === 'MultiPolygon';
     if ((!showHotspots && !isPolygon) || (!showPerimeters && isPolygon)) {
       setSelectedFire(null);
     }
@@ -121,6 +163,11 @@ function App() {
       return frpB - frpA; 
     });
   }, [wildfires, bounds]);
+
+  const visiblePerimeters = useMemo(() => {
+    if (!perimeters.features.length) return [];
+    return perimeters.features;
+  }, [perimeters]);
 
   const gridStep = useMemo(() => {
     if (zoom <= 3) return 20;
@@ -145,11 +192,11 @@ function App() {
   const onMapClick = useCallback((event: any) => {
     const feature = event.features && event.features[0];
     if (feature) {
-      setSelectedFire({ 
-        lng: event.lngLat.lng, 
-        lat: event.lngLat.lat, 
+      setSelectedFire({
+        lng: event.lngLat.lng,
+        lat: event.lngLat.lat,
         props: feature.properties ?? {},
-        isPolygon: feature.geometry.type === 'Polygon'
+        geometryType: feature.geometry?.type,
       });
     } else {
       setSelectedFire(null);
@@ -167,7 +214,7 @@ function App() {
           onClick={onMapClick}
           onMouseMove={(e) => e.lngLat && setHoverCoords({ lng: e.lngLat.lng, lat: e.lngLat.lat })}
           onMouseOut={() => setHoverCoords(null)}
-          interactiveLayerIds={['wildfires-point-layer', 'wildfires-polygon-layer']}
+          interactiveLayerIds={['wildfires-point-layer', 'wildfires-polygon-layer', 'wildfires-polygon-outline']}
           initialViewState={{ longitude: -98.5795, latitude: 39.8283, zoom: 4 }}
           minZoom={2.0}
           mapStyle="https://tiles.openfreemap.org/styles/liberty"
@@ -185,17 +232,16 @@ function App() {
             </>
           )}
 
-          {wildfires.features.length > 0 && (
+          {perimeters.features.length > 0 && showPerimeters && (
+            <Source id="wildfires-polygon-data" type="geojson" data={perimeters}>
+              <Layer {...wildfirePolygonLayerStyle} />
+              <Layer {...wildfirePolygonOutlineStyle} />
+            </Source>
+          )}
+
+          {wildfires.features.length > 0 && showHotspots && (
             <Source id="wildfires-data" type="geojson" data={wildfires}>
-              {showPerimeters && (
-                <>
-                  <Layer {...wildfirePolygonLayerStyle} />
-                  <Layer {...wildfirePolygonOutlineStyle} />
-                </>
-              )}
-              {showHotspots && (
-                <Layer {...wildfireLayerStyle} />
-              )}
+              <Layer {...wildfireLayerStyle} />
             </Source>
           )}
 
@@ -205,97 +251,52 @@ function App() {
               latitude={selectedFire.lat}
               anchor="bottom"
               onClose={() => setSelectedFire(null)}
-              closeButton={true}
             >
-              {/* SOLID UI: Thick borders and block shadows */}
-              <div style={{ 
-                color: '#1a1a1a', 
-                backgroundColor: '#ffffff',
-                border: '2px solid #333', 
-                boxShadow: '4px 4px 0px rgba(0,0,0,1)', 
-                padding: '12px',
-                borderRadius: '2px', 
-                minWidth: '220px', 
-                fontSize: '13px',
-                marginTop: '10px'
-              }}>
-                <h3 style={{ 
-                  margin: '0 0 8px 0', 
-                  borderBottom: '2px solid #D32F2F', 
-                  color: '#D32F2F', 
-                  paddingBottom: '4px',
-                  textTransform: 'uppercase',
-                  fontSize: '15px'
-                }}>
-                  {selectedFire.props.satellite || 'SENSOR DATA'}
+              <div style={{ color: '#333' }}>
+                <h3 style={{ margin: 0 }}>
+                  {selectedFire.geometryType === 'Polygon' || selectedFire.geometryType === 'MultiPolygon'
+                    ? 'Fire Perimeter'
+                    : selectedFire.props.satellite || 'Satellite Point'}
                 </h3>
-                
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontWeight: 'bold', margin: '8px 0' }}>
-                  <p style={{ margin: 0 }}>FRP: {selectedFire.props.frp ?? 'N/A'} MW</p>
-                  <p style={{ margin: 0 }}>CONF: {selectedFire.props.confidence ?? 'N/A'}</p>
-                </div>
-
-                <div style={{ backgroundColor: '#f0f0f0', padding: '8px', marginTop: '10px', border: '1px solid #333' }}>
-                  <p style={{ margin: '2px 0' }}><strong>Instrument:</strong> {selectedFire.props.instrument || 'N/A'}</p>
-                  <p style={{ margin: '2px 0' }}><strong>Time:</strong> {selectedFire.props.acq_date} {selectedFire.props.acq_time}</p>
-                  <p style={{ margin: '2px 0' }}><strong>Period:</strong> {selectedFire.props.daynight === 'D' ? '☀️ DAY' : '🌙 NIGHT'}</p>
-                  {selectedFire.props.bright_ti4 && (
-                    <p style={{ margin: '2px 0' }}><strong>Brightness:</strong> {selectedFire.props.bright_ti4} K</p>
-                  )}
-                </div>
+                <p><strong>ID:</strong> {selectedFire.props.id ?? 'N/A'}</p>
+                {(selectedFire.geometryType === 'Polygon' || selectedFire.geometryType === 'MultiPolygon') ? (
+                  <>
+                    <p><strong>Latest Detection:</strong> {selectedFire.props.latest_detection_time ?? 'N/A'}</p>
+                    <p><strong>Detections:</strong> {selectedFire.props.detection_count ?? 'N/A'}</p>
+                  </>
+                ) : (
+                  <>
+                    <p><strong>FRP:</strong> {selectedFire.props.frp ?? 'N/A'} MW</p>
+                    <p><strong>Conf:</strong> {selectedFire.props.confidence ?? 'N/A'}</p>
+                  </>
+                )}
               </div>
             </Popup>
           )}
         </Map>
 
         {hoverCoords && (
-          <div style={{
-            position: 'absolute', bottom: '20px', left: '20px', zIndex: 10,
-            backgroundColor: '#ffffff', color: '#000', border: '2px solid #333',
-            padding: '6px 12px', fontWeight: 'bold', fontFamily: 'monospace',
-            boxShadow: '3px 3px 0px rgba(0,0,0,1)'
-          }}>
-            LNG: {hoverCoords.lng.toFixed(4)} | LAT: {hoverCoords.lat.toFixed(4)}
+          <div
+            style={{
+              position: 'absolute', bottom: '20px', left: '20px', zIndex: 10,
+              backgroundColor: 'rgba(0, 0, 0, 0.75)', color: '#fff',
+              padding: '8px 12px', borderRadius: '6px', fontFamily: 'monospace',
+            }}
+          >
+            Lng: {hoverCoords.lng.toFixed(4)} | Lat: {hoverCoords.lat.toFixed(4)}
           </div>
         )}
 
         <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', gap: '10px' }}>
-          <button onClick={() => setShowGrid(!showGrid)} style={{ 
-            padding: '10px 15px', 
-            background: showGrid ? '#333' : 'white', 
-            color: showGrid ? 'white' : 'black',
-            border: '2px solid #333',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-            boxShadow: '2px 2px 0px rgba(0,0,0,1)'
-          }}>
-            GRID: {showGrid ? 'ON' : 'OFF'}
+          <button onClick={() => setShowGrid(!showGrid)} style={{ padding: '12px', background: showGrid ? '#ff8c00' : 'white', borderRadius: '8px' }}>
+            Grid Lines: {showGrid ? 'ON' : 'OFF'}
           </button>
-          <button onClick={() => setIsGlobe(!isGlobe)} style={{ 
-            padding: '10px 15px', 
-            background: 'white', 
-            color: 'black',
-            border: '2px solid #333',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-            boxShadow: '2px 2px 0px rgba(0,0,0,1)'
-          }}>
-            {isGlobe ? '2D MODE' : '3D MODE'}
+          <button onClick={() => setIsGlobe(!isGlobe)} style={{ padding: '12px', background: 'white', borderRadius: '8px' }}>
+            {isGlobe ? 'Switch to 2D' : 'Switch to 3D'}
           </button>
           {!isDashboardOpen && (
-            <button onClick={() => setIsDashboardOpen(true)} style={{ 
-              padding: '10px 15px', 
-              background: '#333', 
-              color: 'white',
-              border: '2px solid #333',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              boxShadow: '2px 2px 0px rgba(0,0,0,1)'
-            }}>
-              OPEN DASHBOARD
+            <button onClick={() => setIsDashboardOpen(true)} style={{ padding: '12px', backgroundColor: '#333', color: 'white', borderRadius: '8px' }}>
+              Enter Dashboard
             </button>
           )}
         </div>
@@ -309,11 +310,18 @@ function App() {
         showPerimeters={showPerimeters}
         setShowPerimeters={setShowPerimeters}
         visibleWildfires={visibleWildfires}
+        visiblePerimeters={visiblePerimeters}
         wildfires={wildfires}
+        perimeters={perimeters}
         loading={loading}
+        perimetersLoading={perimetersLoading}
         debugMessage={debugMessage}
+        perimeterDebugMessage={perimeterDebugMessage}
         queryPreview={queryPreview}
+        bounds={bounds}
         flyToFire={flyToFire}
+        getFeatureCenter={getFeatureCenter}
+        setSelectedFire={setSelectedFire}
       />
     </div>
   );

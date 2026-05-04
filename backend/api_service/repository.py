@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from contextlib import suppress
+import json
 from typing import Any
 from uuid import UUID
 
 from .errors import DatabaseUnavailableError
-from .models import CursorBoundary, PointRecord, PointsPage, PointsQuery
+from .models import CursorBoundary, PerimeterRecord, PerimetersQuery, PointRecord, PointsPage, PointsQuery
 
 SELECT_COLUMNS = """
 SELECT
@@ -29,9 +30,27 @@ SELECT
 FROM public.points
 """
 
+PERIMETERS_SELECT_COLUMNS = """
+SELECT
+    id,
+    created_at,
+    updated_at,
+    first_detection_time,
+    latest_detection_time,
+    detection_count,
+    merged,
+    ST_AsGeoJSON(geom)::text AS geometry
+FROM public.fire_perimeters
+"""
+
 
 class PointsRepository:
     def fetch_points(self, query: PointsQuery, *, page_size: int) -> PointsPage:
+        raise NotImplementedError
+
+
+class PerimetersRepository:
+    def fetch_perimeters(self, query: PerimetersQuery) -> list[PerimeterRecord]:
         raise NotImplementedError
 
 
@@ -67,6 +86,29 @@ class PostgresPointsRepository(PointsRepository):
                 source_key=last_record.source_key,
             )
         return PointsPage(records=records, has_more=has_more, next_cursor=next_cursor)
+
+
+class PostgresPerimetersRepository(PerimetersRepository):
+    def __init__(self, connection_factory) -> None:
+        self._connection_factory = connection_factory
+
+    def fetch_perimeters(self, query: PerimetersQuery) -> list[PerimeterRecord]:
+        sql, params = _build_perimeters_query_sql(query)
+        connection = None
+        try:
+            connection = self._connection_factory()
+            with connection.cursor() as cursor:
+                cursor.execute(sql, params)
+                rows = cursor.fetchall()
+                columns = [column[0] for column in cursor.description]
+        except Exception as exc:
+            raise DatabaseUnavailableError("database query failed") from exc
+        finally:
+            if connection is not None:
+                with suppress(Exception):
+                    connection.close()
+
+        return [_row_to_perimeter_record(dict(zip(columns, row, strict=False))) for row in rows]
 
 
 def _build_points_query_sql(query: PointsQuery, page_size: int) -> tuple[str, list[object]]:
@@ -116,6 +158,38 @@ def _build_points_query_sql(query: PointsQuery, page_size: int) -> tuple[str, li
         ]
     )
     params.append(page_size + 1)
+    return sql, params
+
+
+def _build_perimeters_query_sql(query: PerimetersQuery) -> tuple[str, list[object]]:
+    clauses = [
+        "latest_detection_time >= %s",
+        "latest_detection_time <= %s",
+        "merged = %s",
+        "geom && ST_MakeEnvelope(%s, %s, %s, %s, 4326)",
+        "ST_Intersects(geom, ST_MakeEnvelope(%s, %s, %s, %s, 4326))",
+    ]
+    params: list[object] = [
+        query.start_time,
+        query.end_time,
+        query.merged,
+        query.bbox.west,
+        query.bbox.south,
+        query.bbox.east,
+        query.bbox.north,
+        query.bbox.west,
+        query.bbox.south,
+        query.bbox.east,
+        query.bbox.north,
+    ]
+
+    sql = "\n".join(
+        [
+            PERIMETERS_SELECT_COLUMNS,
+            "WHERE " + "\n  AND ".join(clauses),
+            "ORDER BY latest_detection_time DESC, id ASC",
+        ]
+    )
     return sql, params
 
 
@@ -187,6 +261,23 @@ def _row_to_record(row: dict[str, Any]) -> PointRecord:
         scan=_optional_float(row["scan"]),
         track=_optional_float(row["track"]),
         daynight=row["daynight"],
+    )
+
+
+def _row_to_perimeter_record(row: dict[str, Any]) -> PerimeterRecord:
+    identifier = row["id"]
+    if isinstance(identifier, str):
+        with suppress(ValueError):
+            identifier = UUID(identifier)
+    return PerimeterRecord(
+        id=identifier,
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        first_detection_time=row["first_detection_time"],
+        latest_detection_time=row["latest_detection_time"],
+        detection_count=int(row["detection_count"]),
+        merged=bool(row["merged"]),
+        geometry=json.loads(row["geometry"]),
     )
 
 

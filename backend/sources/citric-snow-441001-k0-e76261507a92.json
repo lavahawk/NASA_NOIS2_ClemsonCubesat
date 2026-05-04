@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "citric-snow-441001-k0",
+  "private_key_id": "e76261507a92353c1cc21812dfaa58b5c2522c11",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7fVHoKOYF3iLg\ns5xHte339ubmZrgRqTDTt2i1Web5LWcatTqsyrFHmYfPO97p3oiyJbPhh1//hwCW\nQT7cepEMBvxCfCBJ/5LJUeBs4BK7uWyfoNC0Pp4yHzhQ72+okFIjgxEm27lYi3c0\nyNK6VtArMB1+IEYjLfWGkyjR0nENq3xJF/wZU2Z24H/EQKXmkPx+JMnI03zId1TH\naaHMPdPyzrJXB1c+rOu3JGiB2cnror1zOFjTMBgBNnIO7yciglm8deeIDZEyegSU\nPJCM30EtXE3VljImJmychoADunxGm/t3UyWgCh1J4MHrUFnVxpo0Eh94cERw3Onr\nXkasr8f1AgMBAAECggEAFlsalaKuzttOcFmqVFiqn+sWXDm6UAzLECup9hnaszKJ\nPUOH1Au1ONLjQUAj0+IfjZJ2UPmJ5lesJ75u5u5MdlEs6iaP2RL65zt2lbTgNvck\nryIHUL64sURMvEXYnBJdYPOja20+vAKhO6+IhQSN/OBXW+8wPcigoqPQdbhwl477\nWyhlgOymIp8uMoaj8xJEeFlTkCLrgYi+AoddOhVt0ZJg2nb4thOWwtn4HrF5fS9F\noiMfFe+7jL6DAKs0zp6tNj3rmRSmdI9+cRsNJgaFg6Fl+2vKVIOpAA5B/aqnDJlT\nHfyHP8Az6xuSATW/lUQoc1BvlvowpJ91y7b/JwFLgQKBgQDbobRioLdSKCsj9/8U\nqluNTz+Vs/GcajL2rStrDfjZ2MEJW9WWFgu79bYCODIkOaUCdln9epsjaVH0HCDo\nWKmS6pKELLEfoWJ51FLO74ohOwoTfBP9ZYrU6byJiVEkA14M6QKtokG1L+8hJVIF\nABMRHbNzmUK/XEMZ25rxmeL1NQKBgQDaiRgyrWWU7eCGehV9dTQOmqHJe6ZY+WiQ\nxdNcKAuNdFlJwRFyoeEnrqs3/jkHR+xfsJAm/ogZBdTwgL8HesP/BYu6h7nS306k\nwe2UstmadmksHxsN34RMzYdYOA1ddpSS7veAlONcvW5bR/V+Od9Pxn09PtOj0Kue\nyQ7lj0WfwQKBgC4Atca+wQcdUMPs6unKMPjtM3VIxn+rotcWOHTo7Um749rw+FDC\nd1y8P45BdQcvZ8eXQIweRSZqpfbKeX4RLBuQtHWo4sSsSfMYrOuZMsZ5Fkg0gf9e\naHDmME5ii7NOXUG5AI2b4cVwr9ayeXaAqH26Sd8Zp+hrC8b7v32BbQ9NAoGBAJAt\nvt9AczKMtoNCbIc3Gj9AWdk6UQeGlSxeuBGnAegziO0WCdLdZlTt8lygxzM8ioCf\nVpvDdjs8E78Q0fe3UTQhjoxkG386gQJGR97BGLvFv6GybAD9JKYfO1pCsN6m62L9\nciFNGawH9pUWpqq+t8xEIkCUAMGlXHUIJWHi4oaBAoGAKDO6cpcx6g/SdcXMlIVb\n8EMpXT1DD6H/2upJg2kTIAMqtg+yXUfRY5q+z+qpSQ0skNjdp5U2V2FgAJ9aPIxR\nTUEhr2B8M86gRocNe/2cFfmyQntV8E2+cvfRJIvMk6DAvXPrjWzuGm6kNQgJo2Jw\nkPFtyQTr6UVuImodBG2cXWU=\n-----END PRIVATE KEY-----\n",
+  "client_email": "nois2-476@citric-snow-441001-k0.iam.gserviceaccount.com",
+  "client_id": "104838512639471416636",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/nois2-476%40citric-snow-441001-k0.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

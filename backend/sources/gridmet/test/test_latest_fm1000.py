@@ -32,7 +32,7 @@ def main() -> None:
         print(f"latest_value={value}")
     finally:
         old_root = client.cache_root_if_present
-        client.clear()
+        client.clear_cache()
         print(f"cache_root_after_clear={client.cache_root_if_present}")
         print(f"old_cache_root_exists_after_clear={old_root.exists() if old_root else False}")
 

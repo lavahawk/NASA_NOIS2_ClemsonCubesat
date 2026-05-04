@@ -24,3 +24,21 @@ class NormalizedPoint:
     scan: float | None
     track: float | None
     daynight: str | None
+
+
+@dataclass(slots=True, frozen=True)
+class PerimeterCluster:
+    point_source_keys: tuple[str, ...]
+    first_detection_time: datetime
+    sort_latitude: float
+    sort_longitude: float
+
+
+@dataclass(slots=True, frozen=True)
+class PerimeterCycleSummary:
+    eligible_points: int = 0
+    clusters: int = 0
+    created: int = 0
+    updated: int = 0
+    consolidated: int = 0
+    skipped: int = 0

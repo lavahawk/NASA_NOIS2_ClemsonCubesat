@@ -1,13 +1,23 @@
-backend:
-    fast api
+# Project Status
 
-frontend:
-    vite
-    react app
-    geojson for map
+## Backend
+- [x] FastAPI Service setup
+- [x] NASA FIRMS Client implementation
+- [x] Background worker for data ingestion
+- [x] Hotspot deduplication logic
+- [x] Automated Fire Perimeter generation
+- [ ] Integration of Dynamic World land-cover analysis
+- [ ] Integration of GridMET meteorological data
 
-set up fast api
-try and get live data updating (static timeframe for now)
+## Frontend
+- [x] Vite + React + TypeScript setup
+- [x] MapLibre GL 2D/3D map integration
+- [x] Hotspot and Perimeter visualization
+- [x] Real-time Dashboard with statistics
+- [ ] Advanced filtering UI for hotspots
+- [ ] Time-series visualization for fire growth
 
-cd frontend +
-npm run dev to start the website
+## Infrastructure
+- [x] Docker Compose orchestration
+- [x] PostGIS database setup
+- [x] Environment variable configuration

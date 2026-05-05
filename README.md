@@ -1,4 +1,4 @@
-# NASA NOIS-2 Wildfire Tracker
+# FlareSPOT Wildfire Tracker Dashboard
 
 An end-to-end geospatial system for real-time monitoring of wildfire hotspots and perimeters across North America. This project ingests high-resolution VIIRS detection data from NASA FIRMS, processes it into deduplicated records and generated fire perimeters, and visualizes the results on an interactive 2D/3D dashboard.
 
